@@ -1,8 +1,4 @@
-
-
-// src/lib/dbConnect.ts
-
-import mongoose from 'mongoose';
+import mongoose, { Mongoose } from 'mongoose';
 
 const MONGODB_URI = process.env.MONGODB_URI!;
 
@@ -12,31 +8,41 @@ if (!MONGODB_URI) {
   );
 }
 
-let cached = (global as any).mongoose;
+// This is the updated, more specific type definition for our global cache.
+declare global {
+  var mongoose: {
+    promise: Promise<Mongoose> | null;
+    conn: Mongoose | null;
+  }
+}
+
+let cached = global.mongoose;
 
 if (!cached) {
-  cached = (global as any).mongoose = { conn: null, promise: null };
+  cached = global.mongoose = { conn: null, promise: null };
 }
 
 async function dbConnect() {
   if (cached.conn) {
     return cached.conn;
   }
+
   if (!cached.promise) {
     const opts = {
       bufferCommands: false,
     };
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+
+    // The logic remains the same, but the types are now more precise.
+    cached.promise = mongoose.connect(MONGODB_URI, opts);
   }
+
   try {
     cached.conn = await cached.promise;
   } catch (e) {
     cached.promise = null;
     throw e;
   }
-
+  
   return cached.conn;
 }
 
