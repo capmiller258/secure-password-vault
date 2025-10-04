@@ -1,6 +1,3 @@
-
-// src/middleware.ts
-
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
@@ -34,7 +31,7 @@ export async function middleware(request: NextRequest) {
         headers: requestHeaders,
       },
     });
-  } catch (err) {
+  } catch { // The unused 'err' variable has been removed to fix the build warning
     return new NextResponse(
       JSON.stringify({ message: 'Invalid or expired token.' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } }
