@@ -4,11 +4,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext'; // Import useAuth
+import { useAuth } from '@/context/AuthContext';
 
 export default function AuthForm() {
   const router = useRouter();
-  const { login } = useAuth(); // Get the login function from context
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -31,30 +31,32 @@ export default function AuthForm() {
       if (!response.ok) throw new Error(data.message || 'Something went wrong!');
 
       if (isLoginMode) {
-        // Use the context's login function
-        // It will derive the key and save the token
         login(data.token, password);
-        router.push('/vault'); // Redirect to the vault
+        router.push('/vault');
       } else {
         alert('Signup successful! Please login.');
         setIsLoginMode(true);
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      // --- THIS IS THE FIX ---
+      // We check if 'err' is an actual Error object before using its message
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An unknown error occurred.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
-
-  // ... the rest of the component (toggleMode and JSX) remains the same
+  
+  // ... rest of the component is the same
   const toggleMode = () => {
     setIsLoginMode((prevMode) => !prevMode);
     setError(null);
   };
-
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-        {/* ... all your JSX for the form ... */}
         <h2 className="text-2xl font-bold text-center text-gray-800">
         {isLoginMode ? 'Login' : 'Sign Up'}
       </h2>

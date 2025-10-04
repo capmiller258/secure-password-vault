@@ -4,37 +4,39 @@ import { useEffect, useState, FormEvent, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { encryptData, decryptData } from '@/lib/crypto';
 
-// Define a type for our vault items for better TypeScript support
 type VaultItem = {
   _id: string;
   title: string;
-
   username: string;
-  password?: string; // Make password optional so we can hide/show it
+  password?: string;
   url: string;
   notes: string;
 };
+
+// --- THIS IS A NEW TYPE DEFINITION ---
+// Defines the structure of the data coming from the API before decryption
+type EncryptedVaultItem = {
+    _id: string;
+    title: string;
+    username: string;
+    password: string;
+    url: string;
+    notes: string;
+}
 
 export default function VaultDisplay() {
   const { token, encryptionKey } = useAuth();
   const [items, setItems] = useState<VaultItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // --- NEW: State for the search term ---
   const [searchTerm, setSearchTerm] = useState('');
-
-  // --- State for the item currently being edited ---
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
-
-  // --- State specifically for the "Add New Item" form fields ---
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemUsername, setNewItemUsername] = useState('');
   const [newItemPassword, setNewItemPassword] = useState('');
   const [newItemUrl, setNewItemUrl] = useState('');
   const [newItemNotes, setNewItemNotes] = useState('');
 
-  // This useEffect hook runs once to fetch and decrypt the user's vault items.
   useEffect(() => {
     const fetchItems = async () => {
       if (!token || !encryptionKey) {
@@ -48,8 +50,10 @@ export default function VaultDisplay() {
         if (!response.ok) {
           throw new Error('Failed to fetch vault items. Please try logging in again.');
         }
-        const encryptedItems = await response.json();
-        const decryptedItems = encryptedItems.map((item: any) => ({
+        const encryptedItems: EncryptedVaultItem[] = await response.json();
+        
+        // --- THIS IS THE FIX for the .map() error ---
+        const decryptedItems = encryptedItems.map((item: EncryptedVaultItem) => ({
           ...item,
           title: decryptData(item.title, encryptionKey),
           username: decryptData(item.username, encryptionKey),
@@ -58,8 +62,9 @@ export default function VaultDisplay() {
           notes: item.notes ? decryptData(item.notes, encryptionKey) : '',
         }));
         setItems(decryptedItems);
-      } catch (err: any) {
-        setError(err.message);
+      } catch (err) {
+        if (err instanceof Error) setError(err.message);
+        else setError('An unknown error occurred.');
       } finally {
         setIsLoading(false);
       }
@@ -67,12 +72,8 @@ export default function VaultDisplay() {
     fetchItems();
   }, [token, encryptionKey]);
 
-  // --- NEW: Create a filtered list of items based on the search term ---
-  // This ensures we don't modify the original list of items
   const filteredItems = useMemo(() => {
-    if (!searchTerm) {
-      return items;
-    }
+    if (!searchTerm) return items;
     return items.filter(item =>
       item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.username.toLowerCase().includes(searchTerm.toLowerCase())
@@ -97,10 +98,7 @@ export default function VaultDisplay() {
       };
       const response = await fetch('/api/vault', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(encryptedItem),
       });
 
@@ -108,10 +106,7 @@ export default function VaultDisplay() {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to add the item.");
       }
-      
-      const savedItem = await response.json();
-      
-      // Decrypt the new item before adding to state
+      const savedItem: EncryptedVaultItem = await response.json();
       const decryptedNewItem = {
           ...savedItem,
           title: decryptData(savedItem.title, encryptionKey),
@@ -120,21 +115,17 @@ export default function VaultDisplay() {
           url: savedItem.url ? decryptData(savedItem.url, encryptionKey) : '',
           notes: savedItem.notes ? decryptData(savedItem.notes, encryptionKey) : '',
       };
-
       setItems(prevItems => [...prevItems, decryptedNewItem]);
-
-      // Clear the form fields
       setNewItemTitle('');
       setNewItemUsername('');
       setNewItemPassword('');
       setNewItemUrl('');
       setNewItemNotes('');
-
-    } catch (err: any) {
-        setError(err.message);
+    } catch (err) {
+      if (err instanceof Error) setError(err.message);
+      else setError('An unknown error occurred while adding the item.');
     }
   };
-
 
   const handleUpdateItem = async (e: FormEvent) => {
     e.preventDefault();
@@ -148,19 +139,16 @@ export default function VaultDisplay() {
             url: encryptData(editingItem.url, encryptionKey),
             notes: encryptData(editingItem.notes, encryptionKey),
         };
-
         const response = await fetch(`/api/vault/${editingItem._id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify(encryptedItem),
         });
-
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || "Failed to update item.");
         }
-        
-        const updatedItemFromServer = await response.json();
+        const updatedItemFromServer: EncryptedVaultItem = await response.json();
         const decryptedUpdatedItem = {
             ...updatedItemFromServer,
             title: decryptData(updatedItemFromServer.title, encryptionKey),
@@ -169,38 +157,33 @@ export default function VaultDisplay() {
             url: updatedItemFromServer.url ? decryptData(updatedItemFromServer.url, encryptionKey) : '',
             notes: updatedItemFromServer.notes ? decryptData(updatedItemFromServer.notes, encryptionKey) : '',
         };
-
         setItems(prevItems => prevItems.map(item => 
             item._id === decryptedUpdatedItem._id ? decryptedUpdatedItem : item
         ));
-        
-        setEditingItem(null); // Close the modal on success
-    } catch(err: any) {
-        setError(err.message);
+        setEditingItem(null);
+    } catch(err) {
+        if (err instanceof Error) setError(err.message);
+        else setError('An unknown error occurred while updating.');
     }
   };
-
 
   const handleDeleteItem = async (itemId: string) => {
     if (!token || !window.confirm('Are you sure you want to delete this item?')) {
         return;
     }
-
     try {
         const response = await fetch(`/api/vault/${itemId}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` },
         });
-
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || "Failed to delete item.");
         }
-        
         setItems(prevItems => prevItems.filter(item => item._id !== itemId));
-
-    } catch (err: any) {
-        setError(err.message);
+    } catch (err) {
+      if (err instanceof Error) setError(err.message);
+      else setError('An unknown error occurred while deleting.');
     }
   };
 
@@ -208,7 +191,7 @@ export default function VaultDisplay() {
 
   return (
     <div className="mt-8">
-      {/* --- ADD NEW ITEM FORM --- */}
+      {/* ADD NEW ITEM FORM */}
       <div className="mb-8 p-6 bg-white rounded-lg shadow-md">
         <h2 className="text-2xl font-bold mb-4 text-gray-800">Add New Item</h2>
         <form onSubmit={handleAddItem} className="space-y-4">
@@ -223,11 +206,10 @@ export default function VaultDisplay() {
 
       {error && <p className="text-red-500 text-center my-4">{error}</p>}
 
-      {/* --- DISPLAY SAVED ITEMS --- */}
+      {/* DISPLAY SAVED ITEMS */}
       <div className="p-6 bg-white rounded-lg shadow-md">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-gray-800">Saved Items</h2>
-          {/* --- NEW: Search bar --- */}
           <input 
             type="text"
             placeholder="Search Vault..."
@@ -237,7 +219,6 @@ export default function VaultDisplay() {
           />
         </div>
         <div className="space-y-4">
-          {/* --- UPDATE: Use `filteredItems` here instead of `items` --- */}
           {filteredItems.length > 0 ? filteredItems.map(item => (
             <div key={item._id} className="p-4 border rounded-md bg-gray-50">
               <h3 className="font-bold text-lg text-gray-800">{item.title}</h3>
@@ -255,7 +236,7 @@ export default function VaultDisplay() {
         </div>
       </div>
 
-      {/* --- EDIT ITEM MODAL (POP-UP) --- */}
+      {/* EDIT ITEM MODAL (POP-UP) */}
       {editingItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
@@ -277,3 +258,8 @@ export default function VaultDisplay() {
     </div>
   );
 }
+
+
+
+
+ 
